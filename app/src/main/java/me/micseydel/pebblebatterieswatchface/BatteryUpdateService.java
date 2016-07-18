@@ -1,6 +1,7 @@
 package me.micseydel.pebblebatterieswatchface;
 
 import android.app.Service;
+import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.os.BatteryManager;
@@ -11,6 +12,7 @@ import android.util.Log;
 import android.widget.Toast;
 
 import com.getpebble.android.kit.PebbleKit;
+import com.getpebble.android.kit.PebbleKit.PebbleDataReceiver;
 import com.getpebble.android.kit.util.PebbleDictionary;
 
 import java.util.UUID;
@@ -25,7 +27,9 @@ public class BatteryUpdateService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+        sendBatteryUpdate();
         startRepeatingTask();
+        PebbleKit.registerReceivedDataHandler(getApplicationContext(), dataReceiver);
         return Service.START_STICKY;
     }
 
@@ -35,8 +39,6 @@ public class BatteryUpdateService extends Service {
         if (batteryLevel != null) {
             PebbleDictionary dict = new PebbleDictionary();
             dict.addInt32(0, batteryLevel); // TODO battery
-
-            final UUID appUuid = UUID.fromString("1843c73a-1f77-43a8-85d2-ae824f508766");
 
             // Send the dictionary
             PebbleKit.sendDataToPebble(getApplicationContext(), appUuid, dict);
@@ -88,4 +90,19 @@ public class BatteryUpdateService extends Service {
     {
         mHandler.removeCallbacks(mHandlerTask);
     }
+
+    final UUID appUuid = UUID.fromString("1843c73a-1f77-43a8-85d2-ae824f508766");
+
+    // Create a new receiver to get AppMessages from the C app
+    PebbleDataReceiver dataReceiver = new PebbleDataReceiver(appUuid) {
+
+        @Override
+        public void receiveData(final Context context, final int transaction_id,
+                                final PebbleDictionary dict) {
+            sendBatteryUpdate();
+            // A new AppMessage was received, tell Pebble
+            PebbleKit.sendAckToPebble(context, transaction_id);
+        }
+
+    };
 }
