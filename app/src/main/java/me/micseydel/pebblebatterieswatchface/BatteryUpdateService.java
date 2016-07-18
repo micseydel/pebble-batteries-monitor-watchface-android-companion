@@ -19,61 +19,67 @@ import java.util.UUID;
 
 
 public class BatteryUpdateService extends Service {
+    private static final String TAG = BatteryUpdateService.class.getName();
+
+    private static final UUID APP_UUID = UUID.fromString("1843c73a-1f77-43a8-85d2-ae824f508766");
+
+    private static final int INTERVAL = 1000 * 60; // every minute
+
+    private static final int BATTERY_KEY = 0;
+
     @Nullable
     @Override
-    public IBinder onBind(Intent intent) {
+    public IBinder onBind(final Intent intent) {
         return null;
     }
 
     @Override
-    public int onStartCommand(Intent intent, int flags, int startId) {
+    public int onStartCommand(final Intent intent, final int flags, final int startId) {
         sendBatteryUpdate();
         startRepeatingTask();
         PebbleKit.registerReceivedDataHandler(getApplicationContext(), dataReceiver);
         return Service.START_STICKY;
     }
 
-
     private void sendBatteryUpdate() {
         final Integer batteryLevel = getBatteryLevel();
         if (batteryLevel != null) {
-            PebbleDictionary dict = new PebbleDictionary();
-            dict.addInt32(0, batteryLevel); // TODO battery
+            final PebbleDictionary dict = new PebbleDictionary();
+            dict.addInt32(BATTERY_KEY, batteryLevel);
 
             // Send the dictionary
-            PebbleKit.sendDataToPebble(getApplicationContext(), appUuid, dict);
-            Log.i("mike", "sent " + batteryLevel + " to watch");
+            PebbleKit.sendDataToPebble(getApplicationContext(), APP_UUID, dict);
+            Log.i(TAG, String.format("Sent batteryLevel %s to watch", batteryLevel));
         } else {
-            // TODO: toast + log
-            Log.i("mike", "battery level was unexpectedly null");
-            Toast.makeText(this, "battery level was unexpectedly null", Toast.LENGTH_LONG).show();
+            Log.i(TAG, "Battery level was unexpectedly null");
+            Toast.makeText(this, "Battery level was unexpectedly null", Toast.LENGTH_LONG).show();
         }
     }
 
     private Integer getBatteryLevel() {
         IntentFilter ifilter = new IntentFilter(Intent.ACTION_BATTERY_CHANGED);
-        // TODO; charging state can be extracted https://developer.android.com/training/monitoring-device-state/battery-monitoring.html
+
+        // TODO: communicate battery charging state as well as the current level
+        // See: extracted https://developer.android.com/training/monitoring-device-state/battery-monitoring.html
         Intent batteryStatus = this.registerReceiver(null, ifilter);
 
         if (batteryStatus != null) {
             int level = batteryStatus.getIntExtra(BatteryManager.EXTRA_LEVEL, -1);
             int scale = batteryStatus.getIntExtra(BatteryManager.EXTRA_SCALE, -1);
 
-            Log.i("mike", "level = " + level);
-            Log.i("mike", "scale = " + scale);
+            if (level == -1 || scale == -1) {
+                return null;
+            }
 
-            float batteryPct = 100 * level / (float)scale;
-            Log.i("mike", "batteryPct= " + batteryPct);
-            return (int) batteryPct;
+            return (int) (100 * level / (float) scale);
         }
+
         return null;
     }
 
-    private final static int INTERVAL = 1000 * 60; // every minute
-    Handler mHandler = new Handler();
+    private final Handler mHandler = new Handler();
 
-    Runnable mHandlerTask = new Runnable()
-    {
+    private final Runnable mHandlerTask = new Runnable() {
         @Override
         public void run() {
             sendBatteryUpdate();
@@ -81,21 +87,16 @@ public class BatteryUpdateService extends Service {
         }
     };
 
-    void startRepeatingTask()
-    {
+    void startRepeatingTask() {
         mHandlerTask.run();
     }
 
-    void stopRepeatingTask()
-    {
+    void stopRepeatingTask() {
         mHandler.removeCallbacks(mHandlerTask);
     }
 
-    final UUID appUuid = UUID.fromString("1843c73a-1f77-43a8-85d2-ae824f508766");
-
     // Create a new receiver to get AppMessages from the C app
-    PebbleDataReceiver dataReceiver = new PebbleDataReceiver(appUuid) {
-
+    private final PebbleDataReceiver dataReceiver = new PebbleDataReceiver(APP_UUID) {
         @Override
         public void receiveData(final Context context, final int transaction_id,
                                 final PebbleDictionary dict) {
